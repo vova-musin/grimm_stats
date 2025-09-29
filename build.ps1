@@ -1,7 +1,9 @@
 param(
 	[string]$Python = "python",
 	[string]$Name = "GrimmStats",
-	[string]$CopyTo = "C:\My Drive\Grimm"
+	[string]$CopyTo = "C:\My Drive\Grimm",
+	[switch]$AutoRelease = $false,
+	[string]$CommitMessage = "Auto build"
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,20 +55,25 @@ if (Test-Path $versionFile) {
 		$version = [int]$versionData.version + 1
 		Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
 	} catch {
-		Write-Warning "Не удалось прочитать версию, используем версию 1"
+		Write-Warning "Failed to read version, using version 1"
 	}
 }
+
+# Конвертируем integer версию в semver (X.Y.Z)
+$major = [math]::Floor($version / 100)
+$minor = [math]::Floor(($version % 100) / 10)
+$patch = $version % 10
+$semver = "$major.$minor.$patch"
 
 # Обновляем манифест
 $manifest = @{
 	version = $version
+	semver = $semver
 	build_date = $buildDate
-    # Для GitHub Releases публикуем прямую ссылку на exe. Обновите repo/user и тег
-    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/v$version/GrimmStats.exe"
-    # Резервные поля для совместимости (можно удалить позже)
+    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/v$semver/GrimmStats.exe"
     exe_file_id = ""
     manifest_file_id = ""
-	changelog = @("Версия $version - автосборка от $buildDate")
+	changelog = @("Version $version ($semver) - auto build from $buildDate")
 }
 $manifest | ConvertTo-Json -Depth 3 | Set-Content $versionFile -Encoding UTF8
 
@@ -118,3 +125,46 @@ if ($CopyTo) {
 }
 
 Write-Host "Done. EXE: dist/$Name.exe" -ForegroundColor Green
+
+# Автоматический релиз на GitHub
+if ($AutoRelease) {
+	Write-Host "`n[GitHub] Auto-release to GitHub" -ForegroundColor Cyan
+	
+	# Проверяем, что git настроен
+	$gitStatus = git status 2>&1
+	if ($LASTEXITCODE -ne 0) {
+		Write-Warning "Git not initialized or error. Skipping auto-release."
+		exit 0
+	}
+	
+	Write-Host "[GitHub] Adding files..." -ForegroundColor Yellow
+	git add version.json
+	git add build.ps1
+	
+	Write-Host "[GitHub] Committing changes..." -ForegroundColor Yellow
+	git commit -m "$CommitMessage - v$semver" 2>&1 | Out-Null
+	if ($LASTEXITCODE -ne 0) {
+		Write-Host "No changes to commit or commit failed" -ForegroundColor Gray
+	}
+	
+	Write-Host "[GitHub] Creating tag v$semver..." -ForegroundColor Yellow
+	# Удаляем тег если существует (для перезаписи)
+	git tag -d "v$semver" 2>&1 | Out-Null
+	git tag "v$semver"
+	
+	Write-Host "[GitHub] Pushing to GitHub..." -ForegroundColor Yellow
+	git push origin main 2>&1 | Out-Null
+	
+	Write-Host "[GitHub] Pushing tag v$semver..." -ForegroundColor Yellow
+	git push origin "v$semver" --force 2>&1 | Out-Null
+	
+	if ($LASTEXITCODE -eq 0) {
+		Write-Host "`n✅ Successfully pushed v$semver to GitHub!" -ForegroundColor Green
+		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
+		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/v$semver" -ForegroundColor White
+		Write-Host "`nCheck workflow status at:" -ForegroundColor Cyan
+		Write-Host "  https://github.com/vova-musin/grimm_stats/actions" -ForegroundColor White
+	} else {
+		Write-Warning "Failed to push to GitHub. Check your git configuration and network."
+	}
+}
