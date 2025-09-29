@@ -1362,6 +1362,22 @@ class StatsTab(QWidget):
 		self.rph_label = QLabel("Заработок в час: 0.00")
 
 		self.period_tabs = QTabWidget()
+		# Плашка версии в правом верхнем углу
+		try:
+			app_dir = MainWindow._app_dir()
+			ver = 0
+			vf = os.path.join(app_dir, 'version.json')
+			if os.path.exists(vf):
+				with open(vf, 'r', encoding='utf-8-sig') as f:
+					v = json.load(f)
+					ver = int(v.get('version', 0))
+			semver = f"{ver//100}.{(ver%100)//10}.{ver%10}" if ver else ""
+			if semver:
+				self.version_label = QLabel(f"Версия: {semver}")
+			else:
+				self.version_label = QLabel("Версия: локальная")
+		except Exception:
+			self.version_label = QLabel("Версия: —")
 		self.period_tabs.addTab(QWidget(), "1 день")
 		self.period_tabs.addTab(QWidget(), "7 дней")
 		self.period_tabs.addTab(QWidget(), "30 дней")
@@ -1377,6 +1393,7 @@ class StatsTab(QWidget):
 		header = QHBoxLayout()
 		header.addWidget(QLabel("Статистика"))
 		header.addStretch(1)
+		header.addWidget(self.version_label)
 		header.addWidget(self.reset_button)
 
 		layout = QVBoxLayout()
@@ -2402,8 +2419,8 @@ class MainWindow(QMainWindow):
 		self.storage = DayStorage(base_dir=self._data_dir())
 		self.state = AppState(storage=self.storage)
 
-		# Проверка версии через манифест при запуске
-		self._check_version_on_startup()
+		# Быстрый запуск: автообновление не тормозит старт. Покажем проверку через 2 сек
+		QTimer.singleShot(2000, self._check_version_on_startup)
 
 		self.tabs = QTabWidget()
 		self.stats_tab = StatsTab(self.state)

@@ -1,7 +1,10 @@
 param(
 	[string]$Python = "python",
 	[string]$Name = "GrimmStats",
-	[string]$CopyTo = "C:\My Drive\Grimm"
+	[string]$CopyTo = "C:\My Drive\Grimm",
+	[switch]$PublishRelease = $false,
+	[string]$TagPrefix = "",
+	[string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,15 +31,9 @@ foreach ($p in $pngCandidates) { if (Test-Path $p) { $pngPath = $p; break } }
 if (-not (Test-Path "icon.ico") -and $pngPath) {
 	try {
 		Write-Host "Converting $pngPath -> icon.ico" -ForegroundColor Cyan
-		$py = @"
-from PIL import Image
-import sys
-src = sys.argv[1]
-im = Image.open(src).convert("RGBA")
-sizes = [(256,256),(128,128),(64,64),(32,32),(16,16)]
-im.save("icon.ico", sizes=sizes)
-"@
-		& $venvPython -c $py $pngPath
+		# Избегаем here-string, чтобы не ломать парсер PowerShell
+		$pyCode = 'from PIL import Image,sys; src=sys.argv[1]; im=Image.open(src).convert("RGBA"); sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)]; im.save("icon.ico", sizes=sizes)'
+		& $venvPython -c $pyCode $pngPath
 	} catch {
 		Write-Warning "Не удалось сконвертировать PNG в ICO. Продолжаю без иконки окна."
 	}
@@ -45,28 +42,66 @@ im.save("icon.ico", sizes=sizes)
 Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
 # Читаем текущую версию и инкрементируем
 $versionFile = "version.json"
-$version = 1
+$version = $null
+$semver = ""
 $buildDate = Get-Date -Format "yyyy-MM-dd"
-if (Test-Path $versionFile) {
-	try {
-		$versionData = Get-Content $versionFile | ConvertFrom-Json
-		$version = [int]$versionData.version + 1
-		Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
-	} catch {
-		Write-Warning "Не удалось прочитать версию, используем версию 1"
-	}
+# 1) Если передан параметр -Version, используем его
+if ($Version) {
+    if ($Version.Contains('.')) {
+        $parts = $Version.Split('.')
+        if ($parts.Length -ge 3) {
+            try {
+                $maj = [int]$parts[0]; $min = [int]$parts[1]; $pat = [int]$parts[2]
+                $version = $maj*100 + $min*10 + $pat
+                $semver = "$maj.$min.$pat"
+                Write-Host "Using explicit version: $semver ($version)" -ForegroundColor Yellow
+            } catch {
+                Write-Warning "Неверный формат -Version. Ожидается X.Y.Z. Игнорирую параметр."
+                $Version = ""
+            }
+        } else {
+            Write-Warning "Неверный формат -Version. Ожидается X.Y.Z. Игнорирую параметр."
+            $Version = ""
+        }
+    } else {
+        try {
+            $version = [int]$Version
+        } catch {
+            Write-Warning "Неверный формат -Version. Ожидается целое число или X.Y.Z. Игнорирую параметр."
+            $Version = ""
+        }
+    }
+}
+# 2) Иначе инкрементируем предыдущую
+if (-not $version) {
+    if (Test-Path $versionFile) {
+        try {
+            $versionData = Get-Content $versionFile | ConvertFrom-Json
+            $version = [int]$versionData.version + 1
+            Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
+        } catch {
+            $version = 1
+            Write-Warning "Не удалось прочитать версию, используем версию 1"
+        }
+    } else {
+        $version = 1
+    }
+}
+# 3) Посчитаем semver, если не задан напрямую
+if (-not $semver) {
+    $semver = "{0}.{1}.{2}" -f ([math]::Floor($version/100)), ([math]::Floor(($version % 100)/10)), ($version % 10)
 }
 
 # Обновляем манифест
 $manifest = @{
-	version = $version
-	build_date = $buildDate
-    # Для GitHub Releases публикуем прямую ссылку на exe. Обновите repo/user и тег
-    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/v$version/GrimmStats.exe"
-    # Резервные поля для совместимости (можно удалить позже)
+    version = $version
+    build_date = $buildDate
+    semver = $semver
+    # Прямая ссылка на exe: тег = $TagPrefix + $semver
+    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/$($TagPrefix + $semver)/GrimmStats.exe"
     exe_file_id = ""
     manifest_file_id = ""
-	changelog = @("Версия $version - автосборка от $buildDate")
+    changelog = @("Версия $version ($semver) - автосборка от $buildDate")
 }
 $manifest | ConvertTo-Json -Depth 3 | Set-Content $versionFile -Encoding UTF8
 
@@ -118,3 +153,25 @@ if ($CopyTo) {
 }
 
 Write-Host "Done. EXE: dist/$Name.exe" -ForegroundColor Green
+
+# Публикация релиза через gh (опционально)
+if ($PublishRelease) {
+    try {
+        if (Get-Command gh -ErrorAction SilentlyContinue) {
+            $tag = "$TagPrefix$semver"
+            Write-Host "[release] $tag" -ForegroundColor Cyan
+            $exists = $false
+            try { gh release view $tag | Out-Null; $exists = $true } catch { $exists = $false }
+            if (-not $exists) {
+                gh release create $tag --title "$tag" --notes "Автосборка $tag" | Out-Null
+            }
+            if (Test-Path "dist/$Name.exe") {
+                gh release upload $tag "dist/$Name.exe" --clobber | Out-Null
+            }
+        } else {
+            Write-Warning "GitHub CLI (gh) не найден. Установите gh или не используйте -PublishRelease."
+        }
+    } catch {
+        Write-Warning "Публикация релиза не удалась: $($_.Exception.Message)"
+    }
+}
