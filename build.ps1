@@ -82,8 +82,8 @@ if ($Version) {
     }
 }
 
-# 2) Если версия не задана вручную, инкрементируем предыдущую
-if (-not $version -or $version -eq 1) {
+# 2) Если версия не задана вручную через параметр -Version, инкрементируем предыдущую
+if (-not $Version) {
     if (Test-Path $versionFile) {
         try {
             $versionData = Get-Content $versionFile | ConvertFrom-Json
