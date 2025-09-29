@@ -24,28 +24,26 @@ Write-Host "[3/6] Install requirements" -ForegroundColor Cyan
 & $venvPip install -r requirements.txt
 & $venvPip install pillow | Out-Null
 
-Write-Host "[4/6] Prepare icon (PNG -> ICO if needed)" -ForegroundColor Cyan
+Write-Host "[4/6] Prepare icon (PNG to ICO if needed)" -ForegroundColor Cyan
 $pngCandidates = @("icon.png", "photo_2025-09-21_18-08-53.png")
 $pngPath = $null
 foreach ($p in $pngCandidates) { if (Test-Path $p) { $pngPath = $p; break } }
 if (-not (Test-Path "icon.ico") -and $pngPath) {
 	try {
-		Write-Host "Converting $pngPath -> icon.ico" -ForegroundColor Cyan
-		# Избегаем here-string, чтобы не ломать парсер PowerShell
+		Write-Host "Converting $pngPath to icon.ico" -ForegroundColor Cyan
 		$pyCode = 'from PIL import Image,sys; src=sys.argv[1]; im=Image.open(src).convert("RGBA"); sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)]; im.save("icon.ico", sizes=sizes)'
 		& $venvPython -c $pyCode $pngPath
 	} catch {
-		Write-Warning "Не удалось сконвертировать PNG в ICO. Продолжаю без иконки окна."
+		Write-Warning "Failed to convert PNG to ICO. Continuing without window icon."
 	}
 }
 
 Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
-# Читаем текущую версию и инкрементируем
 $versionFile = "version.json"
 $version = $null
 $semver = ""
 $buildDate = Get-Date -Format "yyyy-MM-dd"
-# 1) Если передан параметр -Version, используем его
+
 if ($Version) {
     if ($Version.Contains('.')) {
         $parts = $Version.Split('.')
@@ -56,23 +54,23 @@ if ($Version) {
                 $semver = "$maj.$min.$pat"
                 Write-Host "Using explicit version: $semver ($version)" -ForegroundColor Yellow
             } catch {
-                Write-Warning "Неверный формат -Version. Ожидается X.Y.Z. Игнорирую параметр."
+                Write-Warning "Invalid -Version format. Expected X.Y.Z. Ignoring parameter."
                 $Version = ""
             }
         } else {
-            Write-Warning "Неверный формат -Version. Ожидается X.Y.Z. Игнорирую параметр."
+            Write-Warning "Invalid -Version format. Expected X.Y.Z. Ignoring parameter."
             $Version = ""
         }
     } else {
         try {
             $version = [int]$Version
         } catch {
-            Write-Warning "Неверный формат -Version. Ожидается целое число или X.Y.Z. Игнорирую параметр."
+            Write-Warning "Invalid -Version format. Expected integer or X.Y.Z. Ignoring parameter."
             $Version = ""
         }
     }
 }
-# 2) Иначе инкрементируем предыдущую
+
 if (-not $version) {
     if (Test-Path $versionFile) {
         try {
@@ -81,27 +79,25 @@ if (-not $version) {
             Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
         } catch {
             $version = 1
-            Write-Warning "Не удалось прочитать версию, используем версию 1"
+            Write-Warning "Failed to read version, using version 1"
         }
     } else {
         $version = 1
     }
 }
-# 3) Посчитаем semver, если не задан напрямую
+
 if (-not $semver) {
     $semver = "{0}.{1}.{2}" -f ([math]::Floor($version/100)), ([math]::Floor(($version % 100)/10)), ($version % 10)
 }
 
-# Обновляем манифест
 $manifest = @{
     version = $version
     build_date = $buildDate
     semver = $semver
-    # Прямая ссылка на exe: тег = $TagPrefix + $semver
     exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/$($TagPrefix + $semver)/GrimmStats.exe"
     exe_file_id = ""
     manifest_file_id = ""
-    changelog = @("Версия $version ($semver) - автосборка от $buildDate")
+    changelog = @("Version $version ($semver) - auto build from $buildDate")
 }
 $manifest | ConvertTo-Json -Depth 3 | Set-Content $versionFile -Encoding UTF8
 
@@ -109,69 +105,73 @@ Write-Host "[6/7] Clean previous builds" -ForegroundColor Cyan
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build,dist
 Remove-Item -Force -ErrorAction SilentlyContinue *.spec
 
-# Формируем аргументы PyInstaller корректно
 $args = @('--noconfirm','--clean','--onefile','--windowed','--name', $Name)
 if (Test-Path "icon.ico") {
 	$args += @('--icon','icon.ico')
 	$args += @('--add-data','icon.ico;.')
 } else {
-	Write-Host "(опционально) Положите icon.ico или icon.png в корень проекта, чтобы задать иконку." -ForegroundColor Yellow
+	Write-Host "(optional) Place icon.ico or icon.png in project root to set icon." -ForegroundColor Yellow
 }
 if (Test-Path $versionFile) {
-    # Вкладываем version.json внутрь onefile, чтобы приложение могло читать локальную версию из _MEIPASS
     $args += @('--add-data',"$versionFile;.")
 }
 
 Write-Host "[7/7] Build with PyInstaller" -ForegroundColor Cyan
 & $venvPython -m PyInstaller @args main.py
 
-# Собираем updater.exe (onefile, console)
 Write-Host "[post] Build updater" -ForegroundColor Cyan
 & $venvPython -m PyInstaller --noconfirm --clean --onefile --name updater updater.py | Out-Null
 
-# Доп. шаг: копирование результата в целевую папку (если задано)
 if ($CopyTo) {
 	if (-not (Test-Path $CopyTo)) {
-		Write-Host "[post] Создаю папку назначения: $CopyTo" -ForegroundColor Cyan
+		Write-Host "[post] Creating destination folder: $CopyTo" -ForegroundColor Cyan
 		New-Item -ItemType Directory -Force -Path $CopyTo | Out-Null
 	}
 	$dstExe = Join-Path $CopyTo ("{0}.exe" -f $Name)
 	if (Test-Path "dist/$Name.exe") {
-		Write-Host "[post] Copying dist/$Name.exe -> $dstExe" -ForegroundColor Cyan
+		Write-Host "[post] Copying dist/$Name.exe to $dstExe" -ForegroundColor Cyan
 		Copy-Item -Force "dist/$Name.exe" $dstExe
 	}
 	if (Test-Path "dist/updater.exe") {
 		$dstUpd = Join-Path $CopyTo "updater.exe"
-		Write-Host "[post] Copying dist/updater.exe -> $dstUpd" -ForegroundColor Cyan
+		Write-Host "[post] Copying dist/updater.exe to $dstUpd" -ForegroundColor Cyan
 		Copy-Item -Force "dist/updater.exe" $dstUpd
 	}
 	if (Test-Path $versionFile) {
 		$dstVer = Join-Path $CopyTo "version.json"
-		Write-Host "[post] Copying $versionFile -> $dstVer" -ForegroundColor Cyan
+		Write-Host "[post] Copying $versionFile to $dstVer" -ForegroundColor Cyan
 		Copy-Item -Force $versionFile $dstVer
 	}
 }
 
 Write-Host "Done. EXE: dist/$Name.exe" -ForegroundColor Green
 
-# Публикация релиза через gh (опционально)
 if ($PublishRelease) {
     try {
+        $owner = "vova-musin"; $repo = "grimm_stats"
         if (Get-Command gh -ErrorAction SilentlyContinue) {
             $tag = "$TagPrefix$semver"
-            Write-Host "[release] $tag" -ForegroundColor Cyan
-            $exists = $false
-            try { gh release view $tag | Out-Null; $exists = $true } catch { $exists = $false }
-            if (-not $exists) {
-                gh release create $tag --title "$tag" --notes "Автосборка $tag" | Out-Null
-            }
-            if (Test-Path "dist/$Name.exe") {
-                gh release upload $tag "dist/$Name.exe" --clobber | Out-Null
-            }
+            Write-Host "[release] $tag (gh)" -ForegroundColor Cyan
+            gh release create $tag --title "$tag" --notes "Auto build $tag" 2>$null | Out-Null
+            if (Test-Path "dist/$Name.exe") { gh release upload $tag "dist/$Name.exe" --clobber | Out-Null }
+        } elseif ($env:GITHUB_TOKEN) {
+            Write-Host "[release] using GitHub API" -ForegroundColor Cyan
+            $token = $env:GITHUB_TOKEN
+            $base = "https://api.github.com"; $headers = @{ Authorization = "token $token"; "User-Agent" = "grimm-stats-build" }
+            $tag = "$TagPrefix$semver"
+            try {
+                $body = @{ tag_name = $tag; name = $tag; body = "Auto build $tag"; draft = $false; prerelease = $false } | ConvertTo-Json
+                $rel = Invoke-RestMethod -Method Post -Uri "$base/repos/$owner/$repo/releases" -Headers $headers -Body $body -ContentType "application/json"
+            } catch { $rel = Invoke-RestMethod -Method Get -Uri "$base/repos/$owner/$repo/releases/tags/$tag" -Headers $headers }
+            if (-not $rel) { throw "release create failed" }
+            $asset = Join-Path $PSScriptRoot "dist/$Name.exe"
+            $upload = "https://uploads.github.com/repos/$owner/$repo/releases/$($rel.id)/assets?name=$Name.exe"
+            Invoke-RestMethod -Method Post -Uri $upload -Headers @{ Authorization = "token $token"; "Content-Type" = "application/octet-stream"; "User-Agent" = "grimm-stats-build" } -InFile $asset -ContentType "application/octet-stream" | Out-Null
         } else {
-            Write-Warning "GitHub CLI (gh) не найден. Установите gh или не используйте -PublishRelease."
+            Write-Warning "No gh and no GITHUB_TOKEN - skip release publish."
         }
     } catch {
-        Write-Warning "Публикация релиза не удалась: $($_.Exception.Message)"
+        $msg = ('Release publish failed: {0}' -f ($_.Exception.Message))
+        Write-Warning $msg
     }
 }

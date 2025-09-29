@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver (e.g. 1.2.3)'
+        required: false
 
 permissions:
   contents: write
@@ -14,6 +19,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve tag
+        shell: pwsh
+        run: |
+          $tag = ''
+          if ('${{ github.ref_type }}' -eq 'tag') { $tag = '${{ github.ref_name }}' }
+          if (-not $tag) { $v = '${{ inputs.version }}'; if ($v) { $tag = "v$($v)" } }
+          if (-not $tag) { throw 'TAG not provided. Push tag vX.Y.Z or run manually with version input.' }
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -36,20 +50,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/GrimmStats.exe
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
 
       - name: Update version.json in main
         shell: pwsh
         env:
           REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.TAG }}
         run: |
           if ($env:TAG -match '^(v?)([0-9]+)\.([0-9]+)\.([0-9]+)$') {
             $semver = "$($Matches[2]).$($Matches[3]).$($Matches[4])"
             $ver = [int]$Matches[2]*100 + [int]$Matches[3]*10 + [int]$Matches[4]
             $obj = Get-Content version.json | ConvertFrom-Json
-            $obj.version = $ver
-            $obj.semver = $semver
-            $obj.exe_url = "https://github.com/$env:REPO/releases/download/$env:TAG/GrimmStats.exe"
+            if ($obj.PSObject.Properties.Name -contains 'version') { $obj.version = $ver } else { $obj | Add-Member -NotePropertyName 'version' -NotePropertyValue $ver }
+            if ($obj.PSObject.Properties.Name -contains 'semver') { $obj.semver = $semver } else { $obj | Add-Member -NotePropertyName 'semver' -NotePropertyValue $semver }
+            $exeUrl = "https://github.com/$env:REPO/releases/download/$env:TAG/GrimmStats.exe"
+            if ($obj.PSObject.Properties.Name -contains 'exe_url') { $obj.exe_url = $exeUrl } else { $obj | Add-Member -NotePropertyName 'exe_url' -NotePropertyValue $exeUrl }
             ($obj | ConvertTo-Json -Depth 6) | Set-Content version.json -Encoding UTF8
             git config user.name "github-actions"
             git config user.email "github-actions@github.com"

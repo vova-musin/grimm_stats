@@ -4,13 +4,32 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "1.0.1",
     "configurations": [
-    
         {
-            "name": "PowerShell: Launch Current File",
-            "type": "PowerShell",
+            "name": "Build GrimmStats (PyInstaller)",
+            "type": "python",
             "request": "launch",
-            "script": "${file}",
-            "args": []
+            "program": "${workspaceFolder}\\.venv\\Scripts\\pyinstaller.exe",
+            "args": [
+                "--noconfirm","--clean","--onefile","--windowed",
+                "--name","GrimmStats","--add-data","version.json;.",
+                "main.py"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run GrimmStats (from dist)",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\dist\\GrimmStats.exe",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Dev: Run main.py",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}\\main.py",
+            "console": "integratedTerminal"
         }
     ]
 }

@@ -1,10 +1,11 @@
 ﻿{
     "changelog":  [
-                      "Р’РµСЂСЃРёСЏ 23 - Р°РІС‚РѕСЃР±РѕСЂРєР° РѕС‚ 2025-09-29"
+                      "Version 101 (1.0.1) - auto build from 2025-09-29"
                   ],
-    "version":  100,
+    "version":  "101",
     "manifest_file_id":  "",
     "exe_file_id":  "",
     "build_date":  "2025-09-29",
-    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/1.0.0/GrimmStats.exe"
+    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v1.0.1/GrimmStats.exe",
+    "semver":  "1.0.1"
 }

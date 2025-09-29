@@ -168,6 +168,12 @@ def main() -> int:
 
     try:
         replace_file(target, source, backup=bool(args.backup))
+        # Исходник нам больше не нужен
+        try:
+            if os.path.exists(source):
+                os.remove(source)
+        except Exception:
+            pass
     except Exception as e:
         # Выведем ошибку и завершение
         _log(f"replace error: {e}")
@@ -180,6 +186,13 @@ def main() -> int:
             cmd += args.start_args.split(' ')
         subprocess.Popen(cmd, close_fds=True)
         _log("started updated app")
+        # Удалим резервную копию после успешного старта
+        try:
+            bak = target + '.bak'
+            if os.path.exists(bak):
+                os.remove(bak)
+        except Exception:
+            pass
     except Exception as e:
         _log(f"start error: {e}")
         # Попробуем откатиться на резервную копию и запустить её
