@@ -23,7 +23,7 @@ python main.py
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
-Готовый файл появится в `dist/MajesticRPStats.exe`.
+Готовый файл появится в `dist/GrimmStats.exe`.
 
 ## Зависимости
 - PySide6 — GUI
