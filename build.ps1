@@ -154,18 +154,21 @@ if ($AutoRelease) {
 	git tag "v$semver"
 	
 	Write-Host "[GitHub] Pushing to GitHub..." -ForegroundColor Yellow
-	git push origin main 2>&1 | Out-Null
+	$pushOutput = git push origin main 2>&1
+	if ($LASTEXITCODE -ne 0 -and $pushOutput -notmatch "Everything up-to-date") {
+		Write-Warning "Failed to push main branch: $pushOutput"
+	}
 	
 	Write-Host "[GitHub] Pushing tag v$semver..." -ForegroundColor Yellow
-	git push origin "v$semver" --force 2>&1 | Out-Null
+	$tagOutput = git push origin "v$semver" --force 2>&1
 	
-	if ($LASTEXITCODE -eq 0) {
-		Write-Host "`n✅ Successfully pushed v$semver to GitHub!" -ForegroundColor Green
+	if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag") {
+		Write-Host "`nSuccessfully pushed v$semver to GitHub!" -ForegroundColor Green
 		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/v$semver" -ForegroundColor White
 		Write-Host "`nCheck workflow status at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/actions" -ForegroundColor White
 	} else {
-		Write-Warning "Failed to push to GitHub. Check your git configuration and network."
+		Write-Warning "Failed to push tag to GitHub: $tagOutput"
 	}
 }
