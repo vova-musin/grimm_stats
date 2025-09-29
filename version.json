@@ -2,9 +2,9 @@
     "changelog":  [
                       "Р’РµСЂСЃРёСЏ 23 - Р°РІС‚РѕСЃР±РѕСЂРєР° РѕС‚ 2025-09-29"
                   ],
-    "version":  23,
+    "version":  100,
     "manifest_file_id":  "",
     "exe_file_id":  "",
     "build_date":  "2025-09-29",
-    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v23/GrimmStats.exe"
+    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/1.0.0/GrimmStats.exe"
 }
