@@ -1,0 +1,15 @@
+# Byte-compiled / cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# OS junk
+.DS_Store
+Thumbs.db
