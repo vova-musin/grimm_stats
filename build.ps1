@@ -150,6 +150,7 @@ if ($AutoRelease) {
 	Write-Host "[GitHub] Creating tag v$semver..." -ForegroundColor Yellow
 	# Удаляем тег если существует (для перезаписи)
 	git tag -d "v$semver" 2>&1 | Out-Null
+	$LASTEXITCODE = 0  # Сбрасываем код ошибки
 	git tag "v$semver"
 	
 	Write-Host "[GitHub] Pushing to GitHub..." -ForegroundColor Yellow
