@@ -3,7 +3,8 @@ param(
 	[string]$Name = "GrimmStats",
 	[string]$CopyTo = "C:\My Drive\Grimm",
 	[switch]$AutoRelease = $false,
-	[string]$CommitMessage = "Auto build"
+	[string]$CommitMessage = "Auto build",
+	[string]$Version = ""  # Можно задать вручную, например "1.0.7" или "107"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,22 +49,59 @@ Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
 # Читаем текущую версию и инкрементируем
 $versionFile = "version.json"
 $version = 1
+$semver = ""
 $buildDate = Get-Date -Format "yyyy-MM-dd"
-if (Test-Path $versionFile) {
-	try {
-		$versionData = Get-Content $versionFile | ConvertFrom-Json
-		$version = [int]$versionData.version + 1
-		Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
-	} catch {
-		Write-Warning "Failed to read version, using version 1"
-	}
+
+# 1) Если передан параметр -Version, используем его
+if ($Version) {
+    if ($Version.Contains('.')) {
+        # Формат X.Y.Z -> конвертируем в integer
+        $parts = $Version.Split('.')
+        if ($parts.Length -ge 3) {
+            try {
+                $maj = [int]$parts[0]; $min = [int]$parts[1]; $pat = [int]$parts[2]
+                $version = $maj*100 + $min*10 + $pat
+                $semver = "$maj.$min.$pat"
+                Write-Host "Using explicit version: $semver ($version)" -ForegroundColor Yellow
+            } catch {
+                Write-Warning "Invalid -Version format. Expected X.Y.Z. Ignoring parameter."
+                $Version = ""
+            }
+        } else {
+            Write-Warning "Invalid -Version format. Expected X.Y.Z. Ignoring parameter."
+            $Version = ""
+        }
+    } else {
+        # Формат integer -> конвертируем в X.Y.Z
+        try {
+            $version = [int]$Version
+        } catch {
+            Write-Warning "Invalid -Version format. Expected integer or X.Y.Z. Ignoring parameter."
+            $Version = ""
+        }
+    }
 }
 
-# Конвертируем integer версию в semver (X.Y.Z)
-$major = [math]::Floor($version / 100)
-$minor = [math]::Floor(($version % 100) / 10)
-$patch = $version % 10
-$semver = "$major.$minor.$patch"
+# 2) Если версия не задана вручную, инкрементируем предыдущую
+if (-not $version -or $version -eq 1) {
+    if (Test-Path $versionFile) {
+        try {
+            $versionData = Get-Content $versionFile | ConvertFrom-Json
+            $version = [int]$versionData.version + 1
+            Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
+        } catch {
+            Write-Warning "Failed to read version, using version 1"
+        }
+    }
+}
+
+# 3) Конвертируем integer версию в semver (X.Y.Z), если не задан напрямую
+if (-not $semver) {
+    $major = [math]::Floor($version / 100)
+    $minor = [math]::Floor(($version % 100) / 10)
+    $patch = $version % 10
+    $semver = "$major.$minor.$patch"
+}
 
 # Обновляем манифест
 $manifest = @{
