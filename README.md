@@ -15,37 +15,6 @@
 
 ---
 
-## Для разработчиков
-
-### Запуск из исходников (Windows)
-1. Установите Python 3.10+
-2. В консоли PowerShell:
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python main.py
-```
-
-### Сборка и релиз
-
-#### Простая локальная сборка
-```powershell
-.\build.ps1
-```
-Результат: `dist/GrimmStats.exe`
-
-#### Автоматическая сборка и релиз на GitHub
-```powershell
-.\build.ps1 -AutoRelease
-```
-Это автоматически:
-1. Соберёт приложение
-2. Инкрементирует версию
-3. Создаст коммит и тег
-4. Отправит на GitHub
-5. GitHub Actions создаст релиз с EXE файлом
-
 ### Структура
 - `main.py` — основное приложение
 - `updater.py` — утилита для обновления (заменяет старый EXE новым)
