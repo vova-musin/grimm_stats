@@ -2533,65 +2533,37 @@ class MainWindow(QMainWindow):
 		return 0
 
 	def _fetch_manifest(self) -> Optional[dict]:
-		"""Возвращает содержимое манифеста (dict) с GitHub Raw либо из Google Drive в качестве резервного канала."""
+		"""Возвращает содержимое манифеста (dict) только из GitHub (Raw/настроенный URL)."""
 		try:
-			# 1) GitHub Raw — основной источник
 			mgr = SettingsManager(os.path.dirname(self.storage.data_dir))
 			st = mgr.load()
-			gh_url = (st.get('updates', {}) or {}).get('github_manifest_url') or DEFAULT_MANIFEST_URL
-			urls = [gh_url]
-			# 2) Fallback: Google Drive, если задано в локальном version.json рядом с exe
-			try:
-				app_dir = self._app_dir()
-				vf = os.path.join(app_dir, 'version.json')
-				if os.path.exists(vf):
-					with open(vf, 'r', encoding='utf-8-sig') as f:
-						v = json.load(f)
-						mid = v.get('manifest_file_id')
-						if mid:
-							urls += [
-								f"https://drive.usercontent.google.com/download?id={mid}&export=download",
-								f"https://drive.google.com/uc?export=download&id={mid}",
-							]
-			except Exception:
-				pass
+			u = (st.get('updates', {}) or {}).get('github_manifest_url') or DEFAULT_MANIFEST_URL
 			cj = _cookiejar.CookieJar()
 			opener = _urlrequest.build_opener(_urlrequest.HTTPCookieProcessor(cj))
 			opener.addheaders = [('User-Agent','Mozilla/5.0')]
-			for u in urls:
-				try:
-					with opener.open(u, timeout=20) as resp:
-						content = resp.read().decode('utf-8-sig', errors='ignore')
-						obj = json.loads(content)
-						self._log(f"manifest loaded from {u}")
-						return obj
-				except Exception as e:
-					self._log(f"manifest fetch failed {u}: {e}")
-			return None
+			with opener.open(u, timeout=20) as resp:
+				content = resp.read().decode('utf-8-sig', errors='ignore')
+				obj = json.loads(content)
+				self._log(f"manifest loaded from {u}")
+				return obj
 		except Exception as e:
 			self._log(f"_fetch_manifest error: {e}")
 			return None
 
 	def _auto_update_to_version(self, new_version: int, exe_file_id: Optional[str]) -> None:
-		"""Автоматически скачивает и запускает updater для новой версии."""
+		"""Автоматически скачивает и запускает updater для новой версии (только GitHub)."""
 		try:
-			# URL для скачивания берем из манифеста (exe_url), фолбэк — Google Drive по exe_file_id
+			# URL для скачивания берём только из GitHub манифеста (exe_url)
 			app_dir = self._app_dir()
 			manifest = self._fetch_manifest() or {}
 			exe_url = manifest.get('exe_url')
 			if not exe_url:
-				file_id = exe_file_id or "1AhlgUVYcWQMBeScS1TTIGAKvqjV0YFoF"
-				exe_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+				raise RuntimeError('В манифесте отсутствует exe_url')
 			# Создаем временный файл для скачивания
 			temp_dir = tempfile.gettempdir()
 			temp_exe = os.path.join(temp_dir, f"GrimmStats_v{new_version}.exe")
 			# Скачиваем надёжным методом с обработкой confirm
-			try:
-				self._http_download(exe_url, temp_exe)
-			except Exception:
-				# Альтернативный хост (часто стабильнее)
-				alt = f"https://drive.usercontent.google.com/download?id={file_id}&export=download"
-				self._http_download(alt, temp_exe)
+			self._http_download(exe_url, temp_exe)
 			# Запускаем updater
 			self._log(f"downloaded new exe to {temp_exe}")
 			self._run_updater_or_launch(temp_exe)
@@ -2611,20 +2583,15 @@ class MainWindow(QMainWindow):
 			print(f"Ошибка скачивания: {e}")
 		return False
 	def _check_updates_background(self) -> None:
-		"""Проверяет наличие новой версии на Google Drive. Если найдена – предлагает скачать и установить."""
+		"""Проверяет новую версию по GitHub и предлагает скачать и установить."""
 		try:
-			file_id, file_name = self._resolve_drive_file()
-			if not file_id:
+			manifest = self._fetch_manifest()
+			if not manifest:
 				return
-			# Определим текущую версию по времени модификации локального exe
-			current_exe = sys.executable if getattr(sys, 'frozen', False) else None
-			current_mtime = os.path.getmtime(current_exe) if current_exe and os.path.exists(current_exe) else 0
-			# Получим дату последнего изменения удалённого файла из заголовков
-			dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-			remote_lastmod = self._http_head_last_modified(dl_url)
-			if remote_lastmod is not None and remote_lastmod <= max(0, int(current_mtime)):
-				return  # обновления нет по дате
-			# Предложим скачать
+			file_name = 'GrimmStats.exe'
+			dl_url = manifest.get('exe_url')
+			if not dl_url:
+				return
 			self._ask_download_update(file_name, dl_url)
 		except Exception:
 			pass
@@ -2632,43 +2599,39 @@ class MainWindow(QMainWindow):
 	def force_check_updates(self, file_id_override: str = "") -> None:
 		def run():
 			try:
-				file_id, file_name = self._resolve_drive_file(file_id_override)
-				if not file_id:
-					QMessageBox.information(self, "Обновление", "Файл на Google Drive не найден")
+				manifest = self._fetch_manifest()
+				if not manifest:
+					QMessageBox.information(self, "Обновление", "Не удалось получить манифест с GitHub")
 					return
-				dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+				file_name = 'GrimmStats.exe'
+				dl_url = manifest.get('exe_url')
+				if not dl_url:
+					QMessageBox.information(self, "Обновление", "В манифесте отсутствует exe_url")
+					return
 				self._ask_download_update(file_name, dl_url)
 			except Exception as e:
 				QMessageBox.warning(self, "Обновление", f"Ошибка проверки: {e}")
 		QTimer.singleShot(0, run)
 
 	def update_from_local_or_drive(self, file_id_override: str = "") -> None:
-		"""Обновить до последней версии: загрузка только из Google Drive."""
+		"""Обновить до последней версии: загрузка только с GitHub по манифесту."""
 		def run():
 			try:
-				file_id, file_name = self._resolve_drive_file(file_id_override)
-				if file_id:
-					dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-					self._ask_download_update(file_name, dl_url)
+				manifest = self._fetch_manifest()
+				if not manifest:
+					QMessageBox.information(self, "Обновление", "Не удалось получить манифест с GitHub")
 					return
-				QMessageBox.information(self, "Обновление", "Источник обновления не настроен: укажите file_id в настройках.")
+				file_name = 'GrimmStats.exe'
+				dl_url = manifest.get('exe_url')
+				if not dl_url:
+					QMessageBox.information(self, "Обновление", "В манифесте отсутствует exe_url")
+					return
+				self._ask_download_update(file_name, dl_url)
 			except Exception as e:
 				QMessageBox.warning(self, "Обновление", f"Ошибка обновления: {e}")
 		QTimer.singleShot(0, run)
 
-	def _resolve_drive_file(self, file_id_override: str = "") -> tuple[str,str]:
-		# Если задан конкретный file_id — используем его
-		if file_id_override:
-			return file_id_override, "GrimmStats.exe"
-		# Иначе — автопоиск по папке
-		folder_url = "https://drive.google.com/drive/folders/18BnZAOikp5LFbqV9VK1wPboI9es890g8?usp=sharing"
-		html = self._http_get(folder_url)
-		if not html:
-			return "", ""
-		m = re.search(r"\\bdata-id=\\\"([a-zA-Z0-9_-]{20,})\\\"[\\s\\S]*?>([^<]*?GrimmStats\\.exe)<", html)
-		if not m:
-			return "", ""
-		return m.group(1), m.group(2).strip()
+	# Удалены все функции и ссылки, связанные с Google Drive
 
 	def _ask_download_update(self, file_name: str, dl_url: str) -> None:
 		def _prompt():
@@ -2772,9 +2735,34 @@ class MainWindow(QMainWindow):
 			f.write(data)
 
 	def _updater_path(self) -> Optional[str]:
-		base = os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else os.path.dirname(os.path.abspath(__file__))
-		path = os.path.join(base, 'updater.exe')
-		return path if os.path.exists(path) else None
+		"""Возвращает путь к updater.exe. Если он встроен в onefile, копирует его в папку данных.
+		Порядок поиска:
+		1) %APPDATA%\\GrimmStats\\updater.exe (persist)
+		2) Временная папка PyInstaller (_MEIPASS) -> копируем в (1)
+		3) Папка рядом с exe (onedir/ручная поставка)
+		"""
+		try:
+			persist = os.path.join(MainWindow._data_dir(), 'updater.exe')
+			if os.path.exists(persist):
+				return persist
+			# Источник 1: _MEIPASS (встроенный бинарь)
+			source_candidates: list[str] = []
+			if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+				source_candidates.append(os.path.join(sys._MEIPASS, 'updater.exe'))  # type: ignore[attr-defined]
+			# Источник 2: рядом с exe
+			base = os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else os.path.dirname(os.path.abspath(__file__))
+			source_candidates.append(os.path.join(base, 'updater.exe'))
+			for src in source_candidates:
+				try:
+					if os.path.exists(src):
+						# Копируем во внешнюю постоянную папку
+						shutil.copy2(src, persist)
+						return persist
+				except Exception:
+					pass
+			return None
+		except Exception:
+			return None
 
 	def _run_updater_or_launch(self, source_exe: str) -> None:
 		updater = self._updater_path()

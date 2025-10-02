@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      - 'v*.*.*-*'   # поддержка предрелизных тегов (v1.2.3-rc.1)
 
 permissions:
   contents: write
@@ -27,17 +28,28 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pillow
 
-      - name: Build GrimmStats.exe
-        shell: pwsh
-        run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name GrimmStats --add-data "version.json;." --icon icon.ico --add-data "icon.ico;." main.py
-
-      - name: Get version from tag
+      - name: Get version/prerelease from tag
         id: get_version
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          echo "TAG=$tag" >> $env:GITHUB_OUTPUT
+          $semver = $tag.TrimStart('v')
+          if ($semver -match '^(\d+\.\d+\.\d+)') { $semver = $Matches[1] }
+          $isPre = if ($tag -like '*-*') { 'true' } else { 'false' }
+          echo "TAG=$tag"       >> $env:GITHUB_OUTPUT
+          echo "SEMVER=$semver" >> $env:GITHUB_OUTPUT
+          echo "PRERELEASE=$isPre" >> $env:GITHUB_OUTPUT
+
+      - name: Build via build.ps1 (bundles updater, optional signing)
+        shell: pwsh
+        env:
+          SIGN_PFX_PATH: ${{ secrets.SIGN_PFX_PATH }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+          SIGN_CERT_THUMBPRINT: ${{ secrets.SIGN_CERT_THUMBPRINT }}
+          SIGN_TOOL: ${{ secrets.SIGN_TOOL }}
+          SIGN_TIMESTAMP_URL: ${{ secrets.SIGN_TIMESTAMP_URL }}
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Version "${{ steps.get_version.outputs.SEMVER }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -45,6 +57,7 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.TAG }}
           name: ${{ steps.get_version.outputs.TAG }}
           body: "Auto build ${{ steps.get_version.outputs.TAG }}"
+          prerelease: ${{ steps.get_version.outputs.PRERELEASE }}
           files: dist/GrimmStats.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
