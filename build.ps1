@@ -304,8 +304,9 @@ if ($AutoRelease -or $PublishRelease) {
 	
 	$tagName = "$TagPrefix$semver"
 	Write-Host "[GitHub] Creating tag $tagName..." -ForegroundColor Yellow
-	# Удаляем тег если существует (для перезаписи)
-	git tag -d "$tagName" 2>&1 | Out-Null
+	# Удаляем тег если существует (для перезаписи) — без ошибок, если его нет
+	$existingTag = (git tag --list "$tagName" 2>$null)
+	if ($existingTag) { git tag -d "$tagName" | Out-Null }
 	$LASTEXITCODE = 0  # Сбрасываем код ошибки
 	git tag "$tagName"
 	
@@ -319,7 +320,7 @@ if ($AutoRelease -or $PublishRelease) {
 	$tagOutput = git push origin "$tagName" --force 2>&1
 	
 	if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag") {
-		Write-Host "`nSuccessfully pushed v$semver to GitHub!" -ForegroundColor Green
+		Write-Host "`nSuccessfully pushed $tagName to GitHub!" -ForegroundColor Green
 		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/$tagName" -ForegroundColor White
 		Write-Host "`nCheck workflow status at:" -ForegroundColor Cyan
