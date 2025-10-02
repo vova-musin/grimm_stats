@@ -3,7 +3,7 @@ name: Release GrimmStats
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v1.2.1'
       - 'v*.*.*-*'   # поддержка предрелизных тегов (v1.2.3-rc.1)
 
 permissions:

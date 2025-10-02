@@ -2358,9 +2358,8 @@ class SettingsTab(QWidget):
 			QMessageBox.information(self, "Папка", f"Открой вручную: {self.data_dir}")
 
 	def _on_update(self) -> None:
-		# Авто: сначала локальная папка, если не найдено — Drive
-		upd = dict(self.settings.get('updates', {}))
-		self.main_window.update_from_local_or_drive(upd.get('drive_file_id',''))
+		# Показываем диалог сравнения версий и предлагаем только релизные обновления
+		self.main_window.show_update_prompt()
 
 	def _update_data_size(self) -> None:
 		total = 0
@@ -2430,7 +2429,24 @@ class MainWindow(QMainWindow):
 		base_dir = os.path.dirname(self.storage.data_dir)
 		self.settings_tab = SettingsTab(self, base_dir)
 		self.tabs.addTab(self.settings_tab, "Настройки")
-		self.setCentralWidget(self.tabs)
+
+		# Верхняя панель с версией справа
+		try:
+			top_bar = QWidget(); top_h = QHBoxLayout(top_bar); top_h.setContentsMargins(8, 6, 8, 6)
+			top_h.addStretch(1)
+			self.version_label = QLabel("")
+			fnt = self.version_label.font(); fnt.setPointSizeF(max(9.0, fnt.pointSizeF()-0.5)); self.version_label.setFont(fnt)
+			self.version_label.setToolTip("Версия приложения")
+			self.version_label.setText(self._format_version_label())
+			top_h.addWidget(self.version_label)
+
+			wrapper = QWidget(); v = QVBoxLayout(wrapper); v.setContentsMargins(0,0,0,0); v.setSpacing(0)
+			v.addWidget(top_bar)
+			v.addWidget(self.tabs)
+			self.setCentralWidget(wrapper)
+		except Exception:
+			# Фолбэк: без верхней панели
+			self.setCentralWidget(self.tabs)
 	def _load_tabs_visibility(self) -> Dict[str, bool]:
 		try:
 			mgr = SettingsManager(os.path.dirname(self.storage.data_dir))
@@ -2532,6 +2548,33 @@ class MainWindow(QMainWindow):
 			pass
 		return 0
 
+	def _get_local_semver(self) -> str:
+		"""Возвращает локальный semver (X.Y.Z), если доступен, иначе рассчитывает из числа."""
+		try:
+			app_dir = self._app_dir()
+			version_file = os.path.join(app_dir, 'version.json')
+			if os.path.exists(version_file):
+				with open(version_file, 'r', encoding='utf-8-sig') as f:
+					data = json.load(f)
+					sem = str(data.get('semver') or '')
+					if sem:
+						return sem
+					num = int(data.get('version', 0))
+					if num:
+						major = num // 100; minor = (num % 100) // 10; patch = num % 10
+						return f"{major}.{minor}.{patch}"
+		except Exception:
+			pass
+		num = self._get_local_version()
+		major = num // 100; minor = (num % 100) // 10; patch = num % 10
+		return f"{major}.{minor}.{patch}"
+
+	def _format_version_label(self) -> str:
+		try:
+			return f"v{self._get_local_semver()}"
+		except Exception:
+			return "v0.0.0"
+
 	def _fetch_manifest(self) -> Optional[dict]:
 		"""Возвращает содержимое манифеста (dict) только из GitHub (Raw/настроенный URL)."""
 		try:
@@ -2569,6 +2612,33 @@ class MainWindow(QMainWindow):
 			self._run_updater_or_launch(temp_exe)
 		except Exception as e:
 			self._log(f"_auto_update_to_version error: {e}")
+
+	def show_update_prompt(self) -> None:
+		"""Показывает диалог с текущей и последней версиями. Предлагает обновление только если последняя не предрелизная и новее локальной."""
+		def run():
+			try:
+				local_num = self._get_local_version()
+				local_sem = self._get_local_semver()
+				manifest = self._fetch_manifest() or {}
+				remote_num = int(manifest.get('version', 0))
+				remote_sem = str(manifest.get('semver') or '')
+				is_prerelease = ('-' in remote_sem)
+				if not manifest or not remote_sem:
+					QMessageBox.information(self, "Обновление", "Не удалось получить информацию о версии с GitHub")
+					return
+				if is_prerelease:
+					QMessageBox.information(self, "Обновление", f"Текущая: v{local_sem}\nНовая доступная: v{remote_sem} (предрелиз)\n\nПредлагаем только релизные версии. Подождите стабильный релиз.")
+					return
+				if remote_num <= local_num:
+					QMessageBox.information(self, "Обновление", f"У вас актуальная версия: v{local_sem}")
+					return
+				# Предложить релизное обновление
+				ret = QMessageBox.question(self, "Обновление", f"У вас: v{local_sem}\nДоступна новая релизная: v{remote_sem}.\nСкачать и установить?")
+				if ret == QMessageBox.StandardButton.Yes:
+					self._auto_update_to_version(remote_num, None)
+			except Exception as e:
+				QMessageBox.warning(self, "Обновление", f"Ошибка проверки: {e}")
+		QTimer.singleShot(0, run)
 
 	def _download_file(self, url: str, dest_path: str) -> bool:
 		"""Скачивает файл по URL в указанное место."""
