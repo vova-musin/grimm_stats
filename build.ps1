@@ -5,7 +5,7 @@ param(
 	[switch]$AutoRelease = $false,
 	[switch]$PublishRelease = $false,   # алиас для совместимости
 	[string]$CommitMessage = "Auto build",
-	[string]$Version = "",             # Можно задать X.Y.Z или целое
+	[string]$Version = "1.2.0",             # Можно задать X.Y.Z или целое
 	[string]$TagPrefix = "v",          # префикс для тега релиза
 
 	# Подписывание (уменьшает блокировки SmartScreen/браузерами)
