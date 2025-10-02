@@ -3,11 +3,98 @@ param(
 	[string]$Name = "GrimmStats",
 	[string]$CopyTo = "C:\My Drive\Grimm",
 	[switch]$AutoRelease = $false,
+	[switch]$PublishRelease = $false,   # алиас для совместимости
 	[string]$CommitMessage = "Auto build",
-	[string]$Version = ""  # Можно задать вручную, например "1.0.7" или "107"
+	[string]$Version = "",             # Можно задать X.Y.Z или целое
+	[string]$TagPrefix = "v",          # префикс для тега релиза
+
+	# Подписывание (уменьшает блокировки SmartScreen/браузерами)
+	[switch]$Sign = $false,
+	[string]$PfxPath = "",             # путь к .pfx (если используется PFX)
+	[SecureString]$PfxPassword = $null, # пароль PFX (SecureString; можно оставить пустым)
+	[string]$CertThumbprint = "",      # отпечаток сертификата в хранилище (альтернатива PFX)
+	[string]$TimestampUrl = "http://timestamp.digicert.com", # RFC3161 TSA
+	[string]$SigntoolPath = ""         # явный путь к signtool.exe (если не в PATH)
 )
 
 $ErrorActionPreference = "Stop"
+
+<#
+	Автоподхват параметров подписи из переменных окружения:
+	- SIGN_PFX_PATH
+	- SIGN_PFX_PASSWORD
+	- SIGN_CERT_THUMBPRINT
+	- SIGN_TOOL
+	- SIGN_TIMESTAMP_URL
+#>
+if (-not $PfxPath -and $env:SIGN_PFX_PATH) { $PfxPath = $env:SIGN_PFX_PATH }
+if (-not $PfxPassword -and $env:SIGN_PFX_PASSWORD) { $PfxPassword = (ConvertTo-SecureString $env:SIGN_PFX_PASSWORD -AsPlainText -Force) }
+if (-not $CertThumbprint -and $env:SIGN_CERT_THUMBPRINT) { $CertThumbprint = $env:SIGN_CERT_THUMBPRINT }
+if (-not $SigntoolPath -and $env:SIGN_TOOL) { $SigntoolPath = $env:SIGN_TOOL }
+if (-not $TimestampUrl -and $env:SIGN_TIMESTAMP_URL) { $TimestampUrl = $env:SIGN_TIMESTAMP_URL }
+if (-not $Sign -and ($PfxPath -or $CertThumbprint)) { $Sign = $true }
+
+function Resolve-SignTool {
+	param(
+		[string]$ExplicitPath
+	)
+	if ($ExplicitPath -and (Test-Path $ExplicitPath)) { return $ExplicitPath }
+
+	$cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+	if ($cmd) { return $cmd.Source }
+
+	$possibleRoots = @(
+		Join-Path $env:ProgramFiles "Windows Kits\10\bin",
+		Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+	) | Where-Object { $_ -and (Test-Path $_) }
+
+	foreach ($root in $possibleRoots) {
+		# Пытаемся найти x64/signtool.exe в подкаталогах (берём самый новый)
+		$found = Get-ChildItem -Path $root -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+			Where-Object { $_.FullName -match "\\x64\\signtool.exe$" } |
+			Sort-Object FullName -Descending |
+			Select-Object -First 1
+		if ($found) { return $found.FullName }
+	}
+
+	throw "signtool.exe не найден. Установите Windows 10 SDK или укажите -SigntoolPath."
+}
+
+function Set-FileSignature {
+	param(
+		[string]$FilePath,
+		[string]$Signtool,
+		[string]$Timestamp,
+		[string]$Pfx,
+		[SecureString]$PfxPwd,
+		[string]$Sha1
+	)
+	if (-not (Test-Path $FilePath)) { return }
+	Write-Host "[sign] $FilePath" -ForegroundColor Yellow
+
+	# Предпочтительно RFC3161 (-tr/-td). Резервно можно -t (AuthentiCode), но оставим только RFC3161.
+	if ($Pfx) {
+		$signArgs = @('sign','/fd','sha256','/f',$Pfx)
+		if ($PfxPwd) {
+			$ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToGlobalAllocUnicode($PfxPwd)
+			try {
+				$plain = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($ptr)
+				if ($plain) { $signArgs += @('/p',$plain) }
+			} finally {
+				[System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode($ptr)
+			}
+		}
+		$signArgs += @('/tr',$Timestamp,'/td','sha256',$FilePath)
+		& $Signtool @signArgs | Out-Null
+	} elseif ($Sha1) {
+		$signArgs = @('sign','/fd','sha256','/sha1',$Sha1,'/tr',$Timestamp,'/td','sha256',$FilePath)
+		& $Signtool @signArgs | Out-Null
+	} else {
+		throw 'No code-signing certificate provided. Use -PfxPath or -CertThumbprint.'
+	}
+
+	if ($LASTEXITCODE -ne 0) { throw "Signing failed: $FilePath" }
+}
 
 Write-Host "[1/6] Create virtual env .venv" -ForegroundColor Cyan
 if (-not (Test-Path ".venv")) {
@@ -29,20 +116,21 @@ $pngCandidates = @("icon.png", "photo_2025-09-21_18-08-53.png")
 $pngPath = $null
 foreach ($p in $pngCandidates) { if (Test-Path $p) { $pngPath = $p; break } }
 if (-not (Test-Path "icon.ico") -and $pngPath) {
-	try {
-		Write-Host "Converting $pngPath -> icon.ico" -ForegroundColor Cyan
-		$py = @"
-from PIL import Image
-import sys
-src = sys.argv[1]
-im = Image.open(src).convert("RGBA")
-sizes = [(256,256),(128,128),(64,64),(32,32),(16,16)]
-im.save("icon.ico", sizes=sizes)
-"@
-		& $venvPython -c $py $pngPath
-	} catch {
-		Write-Warning "Не удалось сконвертировать PNG в ICO. Продолжаю без иконки окна."
-	}
+    try {
+        Write-Host "Converting $pngPath -> icon.ico" -ForegroundColor Cyan
+        $pyLines = @(
+            'from PIL import Image',
+            'import sys',
+            'src = sys.argv[1]',
+            'im = Image.open(src).convert("RGBA")',
+            'sizes = [(256,256),(128,128),(64,64),(32,32),(16,16)]',
+            'im.save("icon.ico", sizes=sizes)'
+        )
+        $py = [string]::Join("`n", $pyLines)
+        & $venvPython -c $py $pngPath
+    } catch {
+        Write-Warning "Не удалось сконвертировать PNG в ICO. Продолжаю без иконки окна."
+    }
 }
 
 Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
@@ -120,24 +208,53 @@ Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build,dist
 Remove-Item -Force -ErrorAction SilentlyContinue *.spec
 
 # Формируем аргументы PyInstaller корректно
-$args = @('--noconfirm','--clean','--onefile','--windowed','--name', $Name)
+$piArgs = @('--noconfirm','--clean','--onefile','--windowed','--name', $Name)
 if (Test-Path "icon.ico") {
-	$args += @('--icon','icon.ico')
-	$args += @('--add-data','icon.ico;.')
+	$piArgs += @('--icon','icon.ico')
+	$piArgs += @('--add-data','icon.ico;.')
 } else {
 	Write-Host "(опционально) Положите icon.ico или icon.png в корень проекта, чтобы задать иконку." -ForegroundColor Yellow
 }
 if (Test-Path $versionFile) {
     # Вкладываем version.json внутрь onefile, чтобы приложение могло читать локальную версию из _MEIPASS
-    $args += @('--add-data',"$versionFile;.")
+	$piArgs += @('--add-data',"$versionFile;.")
 }
 
-Write-Host "[7/7] Build with PyInstaller" -ForegroundColor Cyan
-& $venvPython -m PyInstaller @args main.py
-
-# Собираем updater.exe (onefile, console)
-Write-Host "[post] Build updater" -ForegroundColor Cyan
+Write-Host "[7/8] Build updater (onefile, console)" -ForegroundColor Cyan
 & $venvPython -m PyInstaller --noconfirm --clean --onefile --name updater updater.py | Out-Null
+
+# Встраиваем updater.exe внутрь основного onefile
+if (Test-Path "dist/updater.exe") {
+	$piArgs += @('--add-binary','dist/updater.exe;.')
+}
+
+# Подписываем updater.exe до встраивания (если включено)
+if ($Sign -and (Test-Path 'dist/updater.exe')) {
+	try {
+		$tool = Resolve-SignTool -ExplicitPath $SigntoolPath
+		Set-FileSignature -FilePath 'dist/updater.exe' -Signtool $tool -Timestamp $TimestampUrl -Pfx $PfxPath -PfxPwd $PfxPassword -Sha1 $CertThumbprint
+		Write-Host "[post] updater.exe signed" -ForegroundColor Green
+	} catch {
+		Write-Warning $_
+	}
+}
+
+Write-Host "[8/8] Build main with PyInstaller" -ForegroundColor Cyan
+& $venvPython -m PyInstaller @piArgs main.py
+
+# Опционально: подписываем бинарники для уменьшения блокировок SmartScreen/браузерами
+if ($Sign) {
+	try {
+		$tool = Resolve-SignTool -ExplicitPath $SigntoolPath
+		$mainExe = Join-Path "dist" ("{0}.exe" -f $Name)
+		$updExe = Join-Path "dist" "updater.exe"
+		Set-FileSignature -FilePath $mainExe -Signtool $tool -Timestamp $TimestampUrl -Pfx $PfxPath -PfxPwd $PfxPassword -Sha1 $CertThumbprint
+		Set-FileSignature -FilePath $updExe -Signtool $tool -Timestamp $TimestampUrl -Pfx $PfxPath -PfxPwd $PfxPassword -Sha1 $CertThumbprint
+		Write-Host "[post] Code signing done" -ForegroundColor Green
+	} catch {
+		Write-Warning $_
+	}
+}
 
 # Доп. шаг: копирование результата в целевую папку (если задано)
 if ($CopyTo) {
@@ -165,11 +282,11 @@ if ($CopyTo) {
 Write-Host "Done. EXE: dist/$Name.exe" -ForegroundColor Green
 
 # Автоматический релиз на GitHub
-if ($AutoRelease) {
+if ($AutoRelease -or $PublishRelease) {
 	Write-Host "`n[GitHub] Auto-release to GitHub" -ForegroundColor Cyan
 	
 	# Проверяем, что git настроен
-	$gitStatus = git status 2>&1
+	git status 2>&1 | Out-Null
 	if ($LASTEXITCODE -ne 0) {
 		Write-Warning "Git not initialized or error. Skipping auto-release."
 		exit 0
@@ -185,11 +302,12 @@ if ($AutoRelease) {
 		Write-Host "No changes to commit or commit failed" -ForegroundColor Gray
 	}
 	
-	Write-Host "[GitHub] Creating tag v$semver..." -ForegroundColor Yellow
+	$tagName = "$TagPrefix$semver"
+	Write-Host "[GitHub] Creating tag $tagName..." -ForegroundColor Yellow
 	# Удаляем тег если существует (для перезаписи)
-	git tag -d "v$semver" 2>&1 | Out-Null
+	git tag -d "$tagName" 2>&1 | Out-Null
 	$LASTEXITCODE = 0  # Сбрасываем код ошибки
-	git tag "v$semver"
+	git tag "$tagName"
 	
 	Write-Host "[GitHub] Pushing to GitHub..." -ForegroundColor Yellow
 	$pushOutput = git push origin main 2>&1
@@ -197,13 +315,13 @@ if ($AutoRelease) {
 		Write-Warning "Failed to push main branch: $pushOutput"
 	}
 	
-	Write-Host "[GitHub] Pushing tag v$semver..." -ForegroundColor Yellow
-	$tagOutput = git push origin "v$semver" --force 2>&1
+	Write-Host "[GitHub] Pushing tag $tagName..." -ForegroundColor Yellow
+	$tagOutput = git push origin "$tagName" --force 2>&1
 	
 	if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag") {
 		Write-Host "`nSuccessfully pushed v$semver to GitHub!" -ForegroundColor Green
 		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
-		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/v$semver" -ForegroundColor White
+		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/$tagName" -ForegroundColor White
 		Write-Host "`nCheck workflow status at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/actions" -ForegroundColor White
 	} else {
