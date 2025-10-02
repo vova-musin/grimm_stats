@@ -5,7 +5,7 @@ param(
 	[switch]$AutoRelease = $false,
 	[switch]$PublishRelease = $false,   # алиас для совместимости
 	[string]$CommitMessage = "Auto build",
-	[string]$Version = "1.2.0",             # Можно задать X.Y.Z или целое
+	[string]$Version = "",             # Можно задать X.Y.Z или целое; если пусто — авто +1
 	[string]$TagPrefix = "v",          # префикс для тега релиза
 
 	# Подписывание (уменьшает блокировки SmartScreen/браузерами)
@@ -142,7 +142,7 @@ $buildDate = Get-Date -Format "yyyy-MM-dd"
 
 # 1) Если передан параметр -Version, используем его
 if ($Version) {
-    if ($Version.Contains('.')) {
+    if ($Version -is [string] -and $Version.Contains('.')) {
         # Формат X.Y.Z -> конвертируем в integer
         $parts = $Version.Split('.')
         if ($parts.Length -ge 3) {
