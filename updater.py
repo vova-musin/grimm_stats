@@ -182,14 +182,37 @@ def main() -> int:
         _log("started updated app")
         # После успешного запуска новой версии удалим резервную копию и временный файл
         try:
+            def _try_remove(path: str) -> bool:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                    return True
+                except Exception:
+                    return False
+
             bak = target + '.bak'
-            if os.path.exists(bak):
-                os.remove(bak)
-                _log('removed backup .bak')
             tmp = target + '.tmp'
-            if os.path.exists(tmp):
-                os.remove(tmp)
-                _log('removed temp .tmp')
+            # до 60 попыток в течение ~30 сек (на случай задержки антивируса)
+            for _i in range(60):
+                ok_bak = True if (not os.path.exists(bak)) else _try_remove(bak)
+                ok_tmp = True if (not os.path.exists(tmp)) else _try_remove(tmp)
+                if ok_bak and ok_tmp:
+                    break
+                time.sleep(0.5)
+            # Если всё ещё не удалось — планируем удаление после перезагрузки
+            try:
+                if os.path.exists(bak):
+                    MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
+                    import ctypes as _ct
+                    _ct.windll.kernel32.MoveFileExW(bak, None, MOVEFILE_DELAY_UNTIL_REBOOT)
+                    _log('scheduled .bak removal on reboot')
+                if os.path.exists(tmp):
+                    MOVEFILE_DELAY_UNTIL_REBOOT = 0x4
+                    import ctypes as _ct
+                    _ct.windll.kernel32.MoveFileExW(tmp, None, MOVEFILE_DELAY_UNTIL_REBOOT)
+                    _log('scheduled .tmp removal on reboot')
+            except Exception:
+                pass
         except Exception:
             pass
     except Exception as e:
