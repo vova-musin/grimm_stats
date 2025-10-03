@@ -310,11 +310,20 @@ if ($AutoRelease -or $PublishRelease) {
 	$LASTEXITCODE = 0  # Сбрасываем код ошибки
 	git tag "$tagName"
 	
-	Write-Host "[GitHub] Pushing to GitHub..." -ForegroundColor Yellow
-	$pushOutput = git push origin main 2>&1
-	if ($LASTEXITCODE -ne 0 -and $pushOutput -notmatch "Everything up-to-date") {
-		Write-Warning "Failed to push main branch: $pushOutput"
-	}
+    Write-Host "[GitHub] Pushing to GitHub (main, best-effort)..." -ForegroundColor Yellow
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $pushOutput = git push origin main 2>&1
+        if ($LASTEXITCODE -ne 0 -and $pushOutput -notmatch "Everything up-to-date") {
+            Write-Warning "Failed to push main branch: $pushOutput"
+        }
+    } catch {
+        Write-Warning "Push main failed: $_"
+    } finally {
+        $ErrorActionPreference = $prevEAP
+        $LASTEXITCODE = 0
+    }
 	
 	Write-Host "[GitHub] Pushing tag $tagName..." -ForegroundColor Yellow
 	$tagOutput = git push origin "$tagName" --force 2>&1
