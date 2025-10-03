@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 {
   "build_date": "2025-10-03",
   "version": 129,
@@ -8,4 +9,16 @@
     "Version 129 (1.2.9) - auto build from 2025-10-03"
   ],
   "exe_file_id": ""
+=======
+﻿{
+    "changelog":  [
+                      "Version 130 (1.2.10) - auto build from 2025-10-03"
+                  ],
+    "version":  130,
+    "manifest_file_id":  "",
+    "exe_file_id":  "",
+    "build_date":  "2025-10-03",
+    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.10/GrimmStats.exe",
+    "semver":  "1.2.10"
+>>>>>>> Stashed changes
 }
