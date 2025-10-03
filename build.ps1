@@ -111,6 +111,12 @@ Write-Host "[3/6] Install requirements" -ForegroundColor Cyan
 & $venvPip install -r requirements.txt
 & $venvPip install pillow | Out-Null
 
+Write-Host "[pre] Syntax check (main.py, updater.py)" -ForegroundColor Cyan
+& $venvPython -m py_compile main.py
+if ($LASTEXITCODE -ne 0) { Write-Error "Python syntax check failed: main.py"; exit 1 }
+& $venvPython -m py_compile updater.py
+if ($LASTEXITCODE -ne 0) { Write-Error "Python syntax check failed: updater.py"; exit 1 }
+
 Write-Host "[4/6] Prepare icon (PNG -> ICO if needed)" -ForegroundColor Cyan
 $pngCandidates = @("icon.png", "photo_2025-09-21_18-08-53.png")
 $pngPath = $null
@@ -222,6 +228,7 @@ if (Test-Path $versionFile) {
 
 Write-Host "[7/8] Build updater (onefile, console)" -ForegroundColor Cyan
 & $venvPython -m PyInstaller --noconfirm --clean --onefile --name updater updater.py | Out-Null
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path 'dist/updater.exe')) { Write-Error "Build failed: updater.exe"; exit 1 }
 
 # Встраиваем updater.exe внутрь основного onefile
 if (Test-Path "dist/updater.exe") {
@@ -241,6 +248,7 @@ if ($Sign -and (Test-Path 'dist/updater.exe')) {
 
 Write-Host "[8/8] Build main with PyInstaller" -ForegroundColor Cyan
 & $venvPython -m PyInstaller @piArgs main.py
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path 'dist' ("{0}.exe" -f $Name)))) { Write-Error "Build failed: $Name.exe"; exit 1 }
 
 # Опционально: подписываем бинарники для уменьшения блокировок SmartScreen/браузерами
 if ($Sign) {
