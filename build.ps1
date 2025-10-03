@@ -148,7 +148,7 @@ if ($Version) {
         if ($parts.Length -ge 3) {
             try {
                 $maj = [int]$parts[0]; $min = [int]$parts[1]; $pat = [int]$parts[2]
-                $buildVersionInt = $maj*100 + $min*10 + $pat
+                $buildVersionInt = ($maj*10000) + ($min*100) + $pat
                 $buildSemver = "$maj.$min.$pat"
                 Write-Host "Using explicit version: $buildSemver ($buildVersionInt)" -ForegroundColor Yellow
             } catch {
@@ -185,9 +185,9 @@ if (-not $Version) {
 
 # 3) Конвертируем integer версию в semver (X.Y.Z), если не задан напрямую
 if (-not $buildSemver) {
-    $major = [math]::Floor($buildVersionInt / 100)
-    $minor = [math]::Floor(($buildVersionInt % 100) / 10)
-    $patch = $buildVersionInt % 10
+    $major = [math]::Floor($buildVersionInt / 10000)
+    $minor = [math]::Floor(($buildVersionInt % 10000) / 100)
+    $patch = $buildVersionInt % 100
     $buildSemver = "$major.$minor.$patch"
 }
 
