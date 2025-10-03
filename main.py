@@ -2437,6 +2437,11 @@ class MainWindow(QMainWindow):
 			fnt = self.version_label.font(); fnt.setPointSizeF(max(9.0, fnt.pointSizeF()-0.5)); self.version_label.setFont(fnt)
 			self.version_label.setToolTip("Версия приложения")
 			self.version_label.setText(self._format_version_label())
+			# Кнопка Discord слева от версии
+			self.discord_button = QPushButton("Discord")
+			self.discord_button.setToolTip("Открыть Discord сообщество")
+			self.discord_button.clicked.connect(lambda: webbrowser.open('https://discord.gg/n5hcWe2JUg'))
+			top_h.addWidget(self.discord_button)
 			top_h.addWidget(self.version_label)
 
 			wrapper = QWidget(); v = QVBoxLayout(wrapper); v.setContentsMargins(0,0,0,0); v.setSpacing(0)
