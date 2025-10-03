@@ -1,11 +1,11 @@
-{
-  "exe_file_id": "",
-  "build_date": "2025-10-03",
-  "exe_url": "https://github.com/vova-musin/grimm_stats/releases/download/v0.0.1/GrimmStats.exe",
-  "manifest_file_id": "",
-  "version": "1",
-  "changelog": [
-    "Version 1 (0.0.1) - auto build from 2025-10-03"
-  ],
-  "semver": "0.0.1"
+﻿{
+    "changelog":  [
+                      "Version 1 (0.0.1) - auto build from 2025-10-03"
+                  ],
+    "version":  "1",
+    "manifest_file_id":  "",
+    "exe_file_id":  "",
+    "build_date":  "2025-10-03",
+    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v0.0.1/GrimmStats.exe",
+    "semver":  "0.0.1"
 }
