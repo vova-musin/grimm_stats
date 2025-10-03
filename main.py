@@ -2467,6 +2467,12 @@ class MainWindow(QMainWindow):
 		for key, tab, title in self._tab_order:
 			if bool(vis.get(key, True)):
 				self.tabs.addTab(tab, title)
+		# Вкладка настроек должна быть всегда доступна
+		try:
+			if hasattr(self, 'settings_tab') and self.settings_tab is not None:
+				self.tabs.addTab(self.settings_tab, "Настройки")
+		except Exception:
+			pass
 
 		# Установка иконки после построения UI и инициализации путей
 		try:

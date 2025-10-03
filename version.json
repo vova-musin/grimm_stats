@@ -1,11 +1,11 @@
 ﻿{
     "changelog":  [
-                      "Version 10218 (1.2.18) - auto build from 2025-10-03"
+                      "Version 10219 (1.2.19) - auto build from 2025-10-03"
                   ],
-    "version":  10218,
+    "version":  10219,
     "manifest_file_id":  "",
     "exe_file_id":  "",
     "build_date":  "2025-10-03",
-    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.18/GrimmStats.exe",
-    "semver":  "1.2.18"
+    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.19/GrimmStats.exe",
+    "semver":  "1.2.19"
 }
