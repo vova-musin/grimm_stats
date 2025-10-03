@@ -2401,8 +2401,7 @@ class MainWindow(QMainWindow):
 		self.storage = DayStorage(base_dir=self._data_dir())
 		self.state = AppState(storage=self.storage)
 
-		# Проверка версии через манифест при запуске
-		self._check_version_on_startup()
+        # Проверку обновлений покажем позже, чтобы не задерживать запуск UI
 
 		self.tabs = QTabWidget()
 		self.stats_tab = StatsTab(self.state)
@@ -2446,7 +2445,7 @@ class MainWindow(QMainWindow):
 			self.setCentralWidget(wrapper)
 		except Exception:
 			# Фолбэк: без верхней панели
-			self.setCentralWidget(self.tabs)
+        self.setCentralWidget(self.tabs)
 	def _load_tabs_visibility(self) -> Dict[str, bool]:
 		try:
 			mgr = SettingsManager(os.path.dirname(self.storage.data_dir))
@@ -2470,8 +2469,14 @@ class MainWindow(QMainWindow):
 			if os.path.exists(icon_path):
 				from PySide6.QtGui import QIcon
 				self.setWindowIcon(QIcon(icon_path))
-		except Exception:
+        except Exception:
 			pass
+
+        # Отложенная проверка обновлений после старта UI (не блокирует запуск)
+        try:
+            QTimer.singleShot(3000, self._check_version_on_startup)
+        except Exception:
+            pass
 
 	def closeEvent(self, event) -> None:  # type: ignore[override]
 		# Остановим все активные сессии
@@ -2517,8 +2522,8 @@ class MainWindow(QMainWindow):
 		except Exception:
 			pass
 
-	def _check_version_on_startup(self) -> None:
-		"""Проверяет версию через манифест при запуске и автоматически запускает updater если есть новая версия."""
+    def _check_version_on_startup(self) -> None:
+        """Фоновая проверка версии после старта: только показывает предложение обновиться."""
 		try:
 			local_version = self._get_local_version()
 			self._log(f"local_version={local_version}")
@@ -2528,10 +2533,9 @@ class MainWindow(QMainWindow):
 				return
 			remote_version = int(manifest.get('version', 0))
 			self._log(f"remote_version={remote_version}")
-			if remote_version > local_version:
-				exe_file_id = manifest.get('exe_file_id') or None
-				self._log(f"update required -> exe_file_id={exe_file_id}")
-				self._auto_update_to_version(remote_version, exe_file_id)
+            if remote_version > local_version:
+                # Не обновляем автоматически. Покажем диалог для пользователя.
+                self.show_update_prompt()
 		except Exception as e:
 			self._log(f"_check_version_on_startup error: {e}")
 
