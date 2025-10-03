@@ -180,6 +180,18 @@ def main() -> int:
             cmd += args.start_args.split(' ')
         subprocess.Popen(cmd, close_fds=True)
         _log("started updated app")
+        # После успешного запуска новой версии удалим резервную копию и временный файл
+        try:
+            bak = target + '.bak'
+            if os.path.exists(bak):
+                os.remove(bak)
+                _log('removed backup .bak')
+            tmp = target + '.tmp'
+            if os.path.exists(tmp):
+                os.remove(tmp)
+                _log('removed temp .tmp')
+        except Exception:
+            pass
     except Exception as e:
         _log(f"start error: {e}")
         # Попробуем откатиться на резервную копию и запустить её
