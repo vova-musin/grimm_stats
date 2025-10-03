@@ -1,24 +1,11 @@
-<<<<<<< Updated upstream
 {
-  "exe_url": "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.7/GrimmStats.exe",
-  "changelog": [
-    "Version 127 (1.2.7) - auto build from 2025-10-03"
-  ],
   "manifest_file_id": "",
   "exe_file_id": "",
+  "version": 128,
+  "exe_url": "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.8/GrimmStats.exe",
   "build_date": "2025-10-03",
-  "semver": "1.2.7",
-  "version": 127
-=======
-﻿{
-    "changelog":  [
-                      "Version 128 (1.2.8) - auto build from 2025-10-03"
-                  ],
-    "version":  128,
-    "manifest_file_id":  "",
-    "exe_file_id":  "",
-    "build_date":  "2025-10-03",
-    "exe_url":  "https://github.com/vova-musin/grimm_stats/releases/download/v1.2.8/GrimmStats.exe",
-    "semver":  "1.2.8"
->>>>>>> Stashed changes
+  "semver": "1.2.8",
+  "changelog": [
+    "Version 128 (1.2.8) - auto build from 2025-10-03"
+  ]
 }
