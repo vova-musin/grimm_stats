@@ -136,8 +136,8 @@ if (-not (Test-Path "icon.ico") -and $pngPath) {
 Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
 # Читаем текущую версию и инкрементируем
 $versionFile = "version.json"
-$version = 1
-$semver = ""
+$buildVersionInt = 1
+$buildSemver = ""
 $buildDate = Get-Date -Format "yyyy-MM-dd"
 
 # 1) Если передан параметр -Version, используем его
@@ -148,9 +148,9 @@ if ($Version) {
         if ($parts.Length -ge 3) {
             try {
                 $maj = [int]$parts[0]; $min = [int]$parts[1]; $pat = [int]$parts[2]
-                $version = $maj*100 + $min*10 + $pat
-                $semver = "$maj.$min.$pat"
-                Write-Host "Using explicit version: $semver ($version)" -ForegroundColor Yellow
+                $buildVersionInt = $maj*100 + $min*10 + $pat
+                $buildSemver = "$maj.$min.$pat"
+                Write-Host "Using explicit version: $buildSemver ($buildVersionInt)" -ForegroundColor Yellow
             } catch {
                 Write-Warning "Invalid -Version format. Expected X.Y.Z. Ignoring parameter."
                 $Version = ""
@@ -162,7 +162,7 @@ if ($Version) {
     } else {
         # Формат integer -> конвертируем в X.Y.Z
         try {
-            $version = [int]$Version
+            $buildVersionInt = [int]$Version
         } catch {
             Write-Warning "Invalid -Version format. Expected integer or X.Y.Z. Ignoring parameter."
             $Version = ""
@@ -175,8 +175,8 @@ if (-not $Version) {
     if (Test-Path $versionFile) {
         try {
             $versionData = Get-Content $versionFile | ConvertFrom-Json
-            $version = [int]$versionData.version + 1
-            Write-Host "Incrementing version: $($versionData.version) -> $version" -ForegroundColor Yellow
+            $buildVersionInt = [int]$versionData.version + 1
+            Write-Host "Incrementing version: $($versionData.version) -> $buildVersionInt" -ForegroundColor Yellow
         } catch {
             Write-Warning "Failed to read version, using version 1"
         }
@@ -184,22 +184,22 @@ if (-not $Version) {
 }
 
 # 3) Конвертируем integer версию в semver (X.Y.Z), если не задан напрямую
-if (-not $semver) {
-    $major = [math]::Floor($version / 100)
-    $minor = [math]::Floor(($version % 100) / 10)
-    $patch = $version % 10
-    $semver = "$major.$minor.$patch"
+if (-not $buildSemver) {
+    $major = [math]::Floor($buildVersionInt / 100)
+    $minor = [math]::Floor(($buildVersionInt % 100) / 10)
+    $patch = $buildVersionInt % 10
+    $buildSemver = "$major.$minor.$patch"
 }
 
 # Обновляем манифест
 $manifest = @{
-	version = $version
-	semver = $semver
+    version = $buildVersionInt
+    semver = $buildSemver
 	build_date = $buildDate
-    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/v$semver/GrimmStats.exe"
+    exe_url = "https://github.com/vova-musin/grimm_stats/releases/download/v$buildSemver/GrimmStats.exe"
     exe_file_id = ""
     manifest_file_id = ""
-	changelog = @("Version $version ($semver) - auto build from $buildDate")
+    changelog = @("Version $buildVersionInt ($buildSemver) - auto build from $buildDate")
 }
 $manifest | ConvertTo-Json -Depth 3 | Set-Content $versionFile -Encoding UTF8
 
@@ -308,12 +308,12 @@ if ($AutoRelease -or $PublishRelease) {
 	git add build.ps1
 	
 	Write-Host "[GitHub] Committing changes..." -ForegroundColor Yellow
-	git commit -m "$CommitMessage - v$semver" 2>&1 | Out-Null
+git commit -m "$CommitMessage - v$buildSemver" 2>&1 | Out-Null
 	if ($LASTEXITCODE -ne 0) {
 		Write-Host "No changes to commit or commit failed" -ForegroundColor Gray
 	}
 	
-	$tagName = "$TagPrefix$semver"
+$tagName = "$TagPrefix$buildSemver"
 	Write-Host "[GitHub] Creating tag $tagName..." -ForegroundColor Yellow
 	# Удаляем тег если существует (для перезаписи) — без ошибок, если его нет
 	$existingTag = (git tag --list "$tagName" 2>$null)
@@ -344,7 +344,7 @@ $ErrorActionPreference = $__prevEAP
 if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag" -or $tagOutput -match "Everything up-to-date") {
 		Write-Host "`nSuccessfully pushed $tagName to GitHub!" -ForegroundColor Green
 		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
-		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/$tagName" -ForegroundColor White
+Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/$tagName" -ForegroundColor White
 		Write-Host "`nCheck workflow status at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/actions" -ForegroundColor White
 	} else {
