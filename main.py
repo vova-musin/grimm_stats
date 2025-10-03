@@ -2607,7 +2607,7 @@ class MainWindow(QMainWindow):
 			temp_exe = os.path.join(temp_dir, f"GrimmStats_v{new_version}.exe")
 			# Скачиваем надёжным методом с обработкой confirm
 			self._http_download(exe_url, temp_exe)
-			# Запускаем updater
+			# Запускаем updater, текущее приложение корректно закроется
 			self._log(f"downloaded new exe to {temp_exe}")
 			self._run_updater_or_launch(temp_exe)
 		except Exception as e:
@@ -2835,6 +2835,14 @@ class MainWindow(QMainWindow):
 			return None
 
 	def _run_updater_or_launch(self, source_exe: str) -> None:
+		# Перед обновлением принудительно сохраним данные/настройки
+		try:
+			self.state._autosave()
+			mgr = SettingsManager(os.path.dirname(self.storage.data_dir))
+			cur = mgr.load(); mgr.save(cur)
+		except Exception:
+			pass
+
 		updater = self._updater_path()
 		app_path = sys.executable if getattr(sys,'frozen',False) else None
 		if updater and app_path:
