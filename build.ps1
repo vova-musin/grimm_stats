@@ -139,6 +139,24 @@ if (-not (Test-Path "icon.ico") -and $pngPath) {
     }
 }
 
+# Discord icon (download and convert to PNG if missing)
+if (-not (Test-Path "discord.png")) {
+    try {
+        Write-Host "Downloading discord icon" -ForegroundColor Cyan
+        Invoke-WebRequest -Uri "https://cojo.ru/wp-content/uploads/2022/12/znachok-discord-1.webp" -OutFile "discord.webp" -UseBasicParsing
+        $pyDl = @'
+from PIL import Image
+img = Image.open("discord.webp").convert("RGBA")
+# небольшая иконка 16x16, чтобы влезала в кнопку
+img = img.resize((16,16))
+img.save("discord.png")
+'@
+        & $venvPython -c $pyDl
+    } catch {
+        Write-Warning "Не удалось получить иконку Discord"
+    }
+}
+
 Write-Host "[5/7] Update version in manifest" -ForegroundColor Cyan
 # Читаем текущую версию и инкрементируем
 $versionFile = "version.json"
@@ -225,6 +243,7 @@ if (Test-Path $versionFile) {
     # Вкладываем version.json внутрь onefile, чтобы приложение могло читать локальную версию из _MEIPASS
 	$piArgs += @('--add-data',"$versionFile;.")
 }
+if (Test-Path "discord.png") { $piArgs += @('--add-data','discord.png;.') }
 
 Write-Host "[7/8] Build updater (onefile, console)" -ForegroundColor Cyan
 & $venvPython -m PyInstaller --noconfirm --clean --onefile --name updater updater.py | Out-Null

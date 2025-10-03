@@ -2243,6 +2243,17 @@ class SettingsTab(QWidget):
 		self.open_dir_button = QPushButton("Открыть папку")
 		self.refresh_size_button = QPushButton("Обновить размер")
 		self.update_button = QPushButton("Обновить приложение…")
+		self.discord_button = QPushButton(" ")
+		self.discord_button.setToolTip("Открыть Discord сообщество")
+		try:
+			# подхватим иконку из ресурсов onefile/onedir
+			app_dir = self._app_dir()
+			icon_path = os.path.join(app_dir, 'discord.png')
+			if os.path.exists(icon_path):
+				from PySide6.QtGui import QIcon
+				self.discord_button.setIcon(QIcon(icon_path))
+		except Exception:
+			pass
 
 		# Вкладки: выбор видимости
 		self.cb_stats = QCheckBox("Статистика")
@@ -2277,6 +2288,7 @@ class SettingsTab(QWidget):
 		btn_row.addWidget(self.open_dir_button)
 		btn_row.addWidget(self.refresh_size_button)
 		btn_row.addWidget(self.update_button)
+		btn_row.addWidget(self.discord_button)
 		data_form.addRow("Путь:", self.data_path_label)
 		data_form.addRow("Размер:", self.data_size_label)
 		data_form.addRow("", btn_row)
@@ -2306,6 +2318,7 @@ class SettingsTab(QWidget):
 		self.open_dir_button.clicked.connect(self._on_open_dir)
 		self.refresh_size_button.clicked.connect(self._update_data_size)
 		self.update_button.clicked.connect(self._on_update)
+		self.discord_button.clicked.connect(lambda: webbrowser.open('https://discord.gg/n5hcWe2JUg'))
 		self.cb_stats.toggled.connect(lambda v: self._on_tab_toggle('stats', v))
 		self.cb_trucker.toggled.connect(lambda v: self._on_tab_toggle('trucker', v))
 		self.cb_farm.toggled.connect(lambda v: self._on_tab_toggle('farm', v))
@@ -2437,11 +2450,7 @@ class MainWindow(QMainWindow):
 			fnt = self.version_label.font(); fnt.setPointSizeF(max(9.0, fnt.pointSizeF()-0.5)); self.version_label.setFont(fnt)
 			self.version_label.setToolTip("Версия приложения")
 			self.version_label.setText(self._format_version_label())
-			# Кнопка Discord слева от версии
-			self.discord_button = QPushButton("Discord")
-			self.discord_button.setToolTip("Открыть Discord сообщество")
-			self.discord_button.clicked.connect(lambda: webbrowser.open('https://discord.gg/n5hcWe2JUg'))
-			top_h.addWidget(self.discord_button)
+			# Перенесем кнопку Discord в настройки (а здесь оставим только версию)
 			top_h.addWidget(self.version_label)
 
 			wrapper = QWidget(); v = QVBoxLayout(wrapper); v.setContentsMargins(0,0,0,0); v.setSpacing(0)
