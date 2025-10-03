@@ -12,7 +12,9 @@ function Read-VersionSimple {
 }
 
 $version = Read-VersionSimple
-$cmd = ".\\build.ps1 -Version `"$version`" -PublishRelease -TagPrefix v"
-Write-Host "Running: $cmd" -ForegroundColor DarkGray
-& powershell -NoProfile -ExecutionPolicy Bypass -Command $cmd
+$root = $PSScriptRoot
+if (-not $root -or [string]::IsNullOrWhiteSpace($root)) { $root = (Get-Location).Path }
+$scriptPath = Join-Path $root 'build.ps1'
+Write-Host "Running: $scriptPath -Version $version -PublishRelease -TagPrefix v" -ForegroundColor DarkGray
+& $scriptPath -Version $version -PublishRelease -TagPrefix v
 Write-Host "Done." -ForegroundColor Green
