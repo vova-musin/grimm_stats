@@ -303,14 +303,19 @@ if ($AutoRelease -or $PublishRelease) {
 		try { git pull --rebase origin main 2>&1 | Out-Null } catch { Write-Warning $_ }
 	} finally { $ErrorActionPreference = $__prevEAP; $LASTEXITCODE = 0 }
 	
-	Write-Host "[GitHub] Adding files..." -ForegroundColor Yellow
-	git add version.json
-	git add build.ps1
+	Write-Host "[GitHub] Adding files (git add -A)..." -ForegroundColor Yellow
+	git add -A
 	
-	Write-Host "[GitHub] Committing changes..." -ForegroundColor Yellow
+	# Коммитим только если есть изменения
+	$pending = git status --porcelain
+	if ($pending) {
+		Write-Host "[GitHub] Committing changes..." -ForegroundColor Yellow
 git commit -m "$CommitMessage - v$buildSemver" 2>&1 | Out-Null
-	if ($LASTEXITCODE -ne 0) {
-		Write-Host "No changes to commit or commit failed" -ForegroundColor Gray
+		if ($LASTEXITCODE -ne 0) {
+			Write-Host "No changes to commit or commit failed" -ForegroundColor Gray
+		}
+	} else {
+		Write-Host "[GitHub] No changes to commit" -ForegroundColor Gray
 	}
 	
 $tagName = "$TagPrefix$buildSemver"

@@ -2607,7 +2607,7 @@ class MainWindow(QMainWindow):
 			temp_exe = os.path.join(temp_dir, f"GrimmStats_v{new_version}.exe")
 			# Скачиваем надёжным методом с обработкой confirm
 			self._http_download(exe_url, temp_exe)
-			# Запускаем updater, текущее приложение корректно закроется
+		# Запускаем updater, текущее приложение корректно закроется
 			self._log(f"downloaded new exe to {temp_exe}")
 			self._run_updater_or_launch(temp_exe)
 		except Exception as e:
@@ -2847,16 +2847,29 @@ class MainWindow(QMainWindow):
 		app_path = sys.executable if getattr(sys,'frozen',False) else None
 		if updater and app_path:
 			try:
-				import subprocess
-				subprocess.Popen([updater, '--app-path', app_path, '--source-exe', source_exe], close_fds=True)
-				QApplication.instance().quit()
+				import subprocess, os
+				DETACHED_PROCESS = 0x00000008
+				CREATE_NEW_PROCESS_GROUP = 0x00000200
+				subprocess.Popen(
+					[updater, '--app-path', app_path, '--source-exe', source_exe],
+					close_fds=True,
+					creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+				)
+				app = QApplication.instance()
+				if app:
+					app.quit()
+				os._exit(0)
 				return
 			except Exception:
 				pass
 		# Фолбэк: запускаем новый exe напрямую
 		try:
+			import os
 			os.startfile(source_exe)
-			QApplication.instance().quit()
+			app = QApplication.instance()
+			if app:
+				app.quit()
+			os._exit(0)
 		except Exception:
 			QMessageBox.information(self, "Обновление", f"Скачано: {source_exe}\nЗапусти новый файл вручную.")
 
