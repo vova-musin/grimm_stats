@@ -2243,15 +2243,19 @@ class SettingsTab(QWidget):
 		self.open_dir_button = QPushButton("Открыть папку")
 		self.refresh_size_button = QPushButton("Обновить размер")
 		self.update_button = QPushButton("Обновить приложение…")
-		self.discord_button = QPushButton(" ")
+		self.discord_button = QPushButton("Discord")
 		self.discord_button.setToolTip("Открыть Discord сообщество")
 		try:
 			# подхватим иконку из ресурсов onefile/onedir
 			app_dir = self._app_dir()
-			icon_path = os.path.join(app_dir, 'discord.png')
-			if os.path.exists(icon_path):
+			icon_png = os.path.join(app_dir, 'discord.png')
+			icon_webp = os.path.join(app_dir, 'discord.webp')
+			icon_path = icon_png if os.path.exists(icon_png) else (icon_webp if os.path.exists(icon_webp) else "")
+			if icon_path:
 				from PySide6.QtGui import QIcon
+				from PySide6.QtCore import QSize
 				self.discord_button.setIcon(QIcon(icon_path))
+				self.discord_button.setIconSize(QSize(16, 16))
 		except Exception:
 			pass
 
@@ -2408,7 +2412,11 @@ class SettingsTab(QWidget):
 class MainWindow(QMainWindow):
 	def __init__(self) -> None:
 		super().__init__()
-		self.setWindowTitle("MajesticRP Статистика")
+		# Заголовок: "Grimm Статистика" и добавлена версия
+		try:
+			self.setWindowTitle(f"Grimm Статистика {self._format_version_label()}")
+		except Exception:
+			self.setWindowTitle("Grimm Статистика")
 		self.resize(900, 600)
 
 		self.storage = DayStorage(base_dir=self._data_dir())
@@ -2442,24 +2450,8 @@ class MainWindow(QMainWindow):
 		self.settings_tab = SettingsTab(self, base_dir)
 		self.tabs.addTab(self.settings_tab, "Настройки")
 
-		# Верхняя панель с версией справа
-		try:
-			top_bar = QWidget(); top_h = QHBoxLayout(top_bar); top_h.setContentsMargins(8, 6, 8, 6)
-			top_h.addStretch(1)
-			self.version_label = QLabel("")
-			fnt = self.version_label.font(); fnt.setPointSizeF(max(9.0, fnt.pointSizeF()-0.5)); self.version_label.setFont(fnt)
-			self.version_label.setToolTip("Версия приложения")
-			self.version_label.setText(self._format_version_label())
-			# Перенесем кнопку Discord в настройки (а здесь оставим только версию)
-			top_h.addWidget(self.version_label)
-
-			wrapper = QWidget(); v = QVBoxLayout(wrapper); v.setContentsMargins(0,0,0,0); v.setSpacing(0)
-			v.addWidget(top_bar)
-			v.addWidget(self.tabs)
-			self.setCentralWidget(wrapper)
-		except Exception:
-			# Фолбэк: без верхней панели
-			self.setCentralWidget(self.tabs)
+		# Версию перенесли в заголовок окна — панель сверху не нужна
+		self.setCentralWidget(self.tabs)
 	def _load_tabs_visibility(self) -> Dict[str, bool]:
 		try:
 			mgr = SettingsManager(os.path.dirname(self.storage.data_dir))
