@@ -291,6 +291,17 @@ if ($AutoRelease -or $PublishRelease) {
 		Write-Warning "Git not initialized or error. Skipping auto-release."
 		exit 0
 	}
+
+	# Синхронизация с origin/main (fetch + rebase), чтобы пушы проходили стабильно
+	Write-Host "[GitHub] Sync main with origin (fetch + rebase)" -ForegroundColor Yellow
+	$__prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+	try {
+		git fetch origin main 2>&1 | Out-Null
+		git rebase --autostash origin/main 2>&1 | Out-Null
+	} catch {
+		Write-Host "Rebase failed, trying pull --rebase" -ForegroundColor DarkYellow
+		try { git pull --rebase origin main 2>&1 | Out-Null } catch { Write-Warning $_ }
+	} finally { $ErrorActionPreference = $__prevEAP; $LASTEXITCODE = 0 }
 	
 	Write-Host "[GitHub] Adding files..." -ForegroundColor Yellow
 	git add version.json
@@ -325,10 +336,12 @@ if ($AutoRelease -or $PublishRelease) {
         $LASTEXITCODE = 0
     }
 	
-	Write-Host "[GitHub] Pushing tag $tagName..." -ForegroundColor Yellow
-	$tagOutput = git push origin "$tagName" --force 2>&1
-	
-	if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag") {
+Write-Host "[GitHub] Pushing tag $tagName..." -ForegroundColor Yellow
+$__prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+try { $tagOutput = git push origin "$tagName" --force 2>&1 } catch { $tagOutput = "" }
+$ErrorActionPreference = $__prevEAP
+
+if ($LASTEXITCODE -eq 0 -or $tagOutput -match "new tag" -or $tagOutput -match "Everything up-to-date") {
 		Write-Host "`nSuccessfully pushed $tagName to GitHub!" -ForegroundColor Green
 		Write-Host "GitHub Actions will build and create release at:" -ForegroundColor Cyan
 		Write-Host "  https://github.com/vova-musin/grimm_stats/releases/tag/$tagName" -ForegroundColor White
